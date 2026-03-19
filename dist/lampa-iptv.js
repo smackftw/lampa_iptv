@@ -333,6 +333,76 @@
 }\
 ';
 
+  function fmt(date) {
+    if (!date) return '';
+    return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function showEpgScreen(channel) {
+    const programs = epg.getAll(channel.id);
+    if (programs.length === 0) {
+      Lampa.Noty.show('Программа передач недоступна');
+      return;
+    }
+
+    const now = new Date();
+    Lampa.Select.show({
+      title:    channel.name + ' — Программа',
+      items:    programs.map(function(p) {
+        return {
+          title:    fmt(p.start) + '–' + fmt(p.stop) + '  ' + p.title,
+          subtitle: p.desc || '',
+          selected: p.start <= now && (!p.stop || p.stop > now)
+        };
+      }),
+      onSelect: function() {} // read-only; close on select is default Lampa.Select behavior
+    });
+  }
+
+  function showCard(channel, onClose) {
+    const cur    = epg.getCurrent(channel.id);
+    const next   = epg.getNext(channel.id);
+    const isFav  = storage.isFavorite(channel.id);
+
+    // Store action fn directly on each item; Lampa.Select.show onSelect passes only (item)
+    const actionItems = [
+      { title: '▶ Смотреть',
+        fn: function() { playChannel(channel); } },
+      { title: isFav ? '★ Убрать из избранного' : '☆ В избранное',
+        fn: function() { toggleFav(channel); if (onClose) onClose(); } },
+      { title: '📋 Программа',
+        fn: function() { showEpgScreen(channel); } },
+      { title: '🚫 Скрыть',
+        fn: function() { storage.addBlacklist(channel.id); Lampa.Noty.show('"' + channel.name + '" скрыт'); if (onClose) onClose(); } }
+    ];
+
+    Lampa.Select.show({
+      title: channel.name,
+      items: [
+        { title: cur  ? 'Сейчас: ' + cur.title  : 'Сейчас: —',  noclick: true },
+        { title: next ? 'Далее: '  + next.title : 'Далее: —',   noclick: true },
+        { separator: true }
+      ].concat(actionItems),
+      onSelect: function(item) {
+        if (typeof item.fn === 'function') item.fn();
+      }
+    });
+  }
+
+  function playChannel(channel) {
+    Lampa.Player.play({ url: channel.url, title: channel.name, iptv: true });
+  }
+
+  function toggleFav(channel) {
+    if (storage.isFavorite(channel.id)) {
+      storage.removeFavorite(channel.id);
+      Lampa.Noty.show('Удалено из избранного');
+    } else {
+      storage.addFavorite(channel.id);
+      Lampa.Noty.show('Добавлено в избранное');
+    }
+  }
+
   const VIRTUAL_GROUPS = ['Все', 'Избранное', 'История'];
 
   function esc(str) {
@@ -432,7 +502,12 @@
         onChannelSelect(null, 'search');
       });
 
+      // Short press → play, long press → card with actions
       body.find('[data-id]').on('hover:enter', function() {
+        const id = $(this).data('id');
+        const ch = allChannels.find(function(c) { return c.id === id; });
+        if (ch) playChannel(ch);
+      }).on('hover:long', function() {
         const id = $(this).data('id');
         const ch = allChannels.find(function(c) { return c.id === id; });
         if (ch) onChannelSelect(ch, 'card');
@@ -456,76 +531,6 @@
       render:  render,
       destroy: function() { Lampa.Listener.remove('liptv:epg_loaded'); }
     };
-  }
-
-  function fmt(date) {
-    if (!date) return '';
-    return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-  }
-
-  function showEpgScreen(channel) {
-    const programs = epg.getAll(channel.id);
-    if (programs.length === 0) {
-      Lampa.Noty.show('Программа передач недоступна');
-      return;
-    }
-
-    const now = new Date();
-    Lampa.Select.show({
-      title:    channel.name + ' — Программа',
-      items:    programs.map(function(p) {
-        return {
-          title:    fmt(p.start) + '–' + fmt(p.stop) + '  ' + p.title,
-          subtitle: p.desc || '',
-          selected: p.start <= now && (!p.stop || p.stop > now)
-        };
-      }),
-      onSelect: function() {} // read-only; close on select is default Lampa.Select behavior
-    });
-  }
-
-  function showCard(channel, onClose) {
-    const cur    = epg.getCurrent(channel.id);
-    const next   = epg.getNext(channel.id);
-    const isFav  = storage.isFavorite(channel.id);
-
-    // Store action fn directly on each item; Lampa.Select.show onSelect passes only (item)
-    const actionItems = [
-      { title: '▶ Смотреть',
-        fn: function() { playChannel(channel); } },
-      { title: isFav ? '★ Убрать из избранного' : '☆ В избранное',
-        fn: function() { toggleFav(channel); if (onClose) onClose(); } },
-      { title: '📋 Программа',
-        fn: function() { showEpgScreen(channel); } },
-      { title: '🚫 Скрыть',
-        fn: function() { storage.addBlacklist(channel.id); Lampa.Noty.show('"' + channel.name + '" скрыт'); if (onClose) onClose(); } }
-    ];
-
-    Lampa.Select.show({
-      title: channel.name,
-      items: [
-        { title: cur  ? 'Сейчас: ' + cur.title  : 'Сейчас: —',  noclick: true },
-        { title: next ? 'Далее: '  + next.title : 'Далее: —',   noclick: true },
-        { separator: true }
-      ].concat(actionItems),
-      onSelect: function(item) {
-        if (typeof item.fn === 'function') item.fn();
-      }
-    });
-  }
-
-  function playChannel(channel) {
-    Lampa.Player.play({ url: channel.url, title: channel.name, iptv: true });
-  }
-
-  function toggleFav(channel) {
-    if (storage.isFavorite(channel.id)) {
-      storage.removeFavorite(channel.id);
-      Lampa.Noty.show('Удалено из избранного');
-    } else {
-      storage.addFavorite(channel.id);
-      Lampa.Noty.show('Добавлено в избранное');
-    }
   }
 
   function showSearch(allChannels) {

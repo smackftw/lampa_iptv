@@ -1,5 +1,6 @@
-import { storage } from '../storage.js';
-import { epg }     from '../epg.js';
+import { storage }     from '../storage.js';
+import { epg }         from '../epg.js';
+import { playChannel } from './card.js';
 
 const VIRTUAL_GROUPS = ['Все', 'Избранное', 'История'];
 
@@ -100,7 +101,12 @@ export function createMainScreen(allChannels, onChannelSelect) {
       onChannelSelect(null, 'search');
     });
 
+    // Short press → play, long press → card with actions
     body.find('[data-id]').on('hover:enter', function() {
+      const id = $(this).data('id');
+      const ch = allChannels.find(function(c) { return c.id === id; });
+      if (ch) playChannel(ch);
+    }).on('hover:long', function() {
       const id = $(this).data('id');
       const ch = allChannels.find(function(c) { return c.id === id; });
       if (ch) onChannelSelect(ch, 'card');
