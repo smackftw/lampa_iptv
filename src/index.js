@@ -17,6 +17,7 @@ import { createOsd }                   from './ui/osd.js';
   let _channels       = [];   // current channel list — used by player history tracking
   let _currentPlayUrl = null; // URL of currently playing channel (for CH+/CH- switching)
   let _osd = null;
+  let _switching = false;     // guard: prevents Player 'destroy' from killing OSD during channel switch
 
   function startHistoryTracking(channelId) {
     clearTimeout(historyTimer);
@@ -99,26 +100,32 @@ import { createOsd }                   from './ui/osd.js';
 
     // Track current playing channel immediately when playChannel() is called
     setOnPlay(function(channel) {
+      _switching = true;
       _currentPlayUrl = channel.url;
       startHistoryTracking(channel.id);
 
-      // Create OSD for player overlay
-      if (_osd) _osd.destroy();
+      // Create OSD only once; reuse across channel switches
+      if (!_osd) {
+        var blacklist = storage.getBlacklist();
+        var visible = _channels.filter(function(ch) { return !blacklist.includes(ch.id); });
+        _osd = createOsd(visible, function(switchedChannel) {
+          playChannel(switchedChannel);
+        });
+      }
+
       var blacklist = storage.getBlacklist();
       var visible = _channels.filter(function(ch) { return !blacklist.includes(ch.id); });
       var idx = visible.findIndex(function(ch) { return ch.url === channel.url; });
-
-      _osd = createOsd(visible, function(switchedChannel) {
-        playChannel(switchedChannel);
-      });
       if (idx >= 0) _osd.show(idx);
+      _switching = false;
     });
 
     // Register player listeners once
     Lampa.Player.listener.follow('destroy', function() {
       stopHistoryTracking();
       _currentPlayUrl = null;
-      if (_osd) { _osd.destroy(); _osd = null; }
+      // Don't destroy OSD during channel switch — Player fires 'destroy' for the old stream
+      if (!_switching && _osd) { _osd.destroy(); _osd = null; }
     });
 
     // Re-render when user updates M3U URL in settings

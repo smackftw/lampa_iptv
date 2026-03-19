@@ -331,6 +331,167 @@
   padding: 3em 1em;\
   text-align: center;\
 }\
+\
+/* ── OSD mini-list (player overlay) ──────────── */\
+.liptv-osd {\
+  position: fixed;\
+  bottom: 2em;\
+  left: 2em;\
+  z-index: 9999;\
+  background: rgba(0,0,0,0.82);\
+  -webkit-backdrop-filter: blur(10px);\
+  backdrop-filter: blur(10px);\
+  border-radius: 10px;\
+  padding: 0.6em 0.8em;\
+  min-width: 18em;\
+  transform: translateX(-110%);\
+  opacity: 0;\
+  transition: transform 300ms ease-out, opacity 300ms ease-out;\
+  pointer-events: none;\
+}\
+.liptv-osd.visible {\
+  transform: translateX(0);\
+  opacity: 1;\
+  pointer-events: auto;\
+}\
+.liptv-osd.fade-out {\
+  transform: translateX(0);\
+  opacity: 0;\
+  transition: opacity 300ms ease-in;\
+}\
+.liptv-osd-item {\
+  display: flex;\
+  align-items: center;\
+  gap: 0.5em;\
+  padding: 0.25em 0;\
+  opacity: 0.4;\
+}\
+.liptv-osd-item.current {\
+  opacity: 1;\
+  background: rgba(255,255,255,0.1);\
+  border-radius: 5px;\
+  padding: 0.35em 0.5em;\
+  margin: 0.15em -0.5em;\
+}\
+.liptv-osd-num {\
+  color: #999;\
+  font-size: 0.8em;\
+  width: 2em;\
+  text-align: right;\
+  flex-shrink: 0;\
+}\
+.liptv-osd-item.current .liptv-osd-num {\
+  background: #e63946;\
+  color: #fff;\
+  font-weight: bold;\
+  font-size: 0.75em;\
+  padding: 0.15em 0.35em;\
+  border-radius: 3px;\
+  width: auto;\
+  text-align: center;\
+}\
+.liptv-osd-name {\
+  color: #ccc;\
+  font-size: 0.9em;\
+  white-space: nowrap;\
+  overflow: hidden;\
+  text-overflow: ellipsis;\
+}\
+.liptv-osd-item.current .liptv-osd-name {\
+  color: #fff;\
+  font-weight: 600;\
+}\
+.liptv-osd-prog {\
+  color: rgba(255,255,255,0.5);\
+  font-size: 0.72em;\
+  white-space: nowrap;\
+  overflow: hidden;\
+  text-overflow: ellipsis;\
+}\
+\
+/* ── EPG sidebar ─────────────────────────────── */\
+.liptv-epg {\
+  position: fixed;\
+  top: 0;\
+  right: 0;\
+  bottom: 0;\
+  width: 40%;\
+  z-index: 10000;\
+  background: rgba(0,0,0,0.88);\
+  -webkit-backdrop-filter: blur(12px);\
+  backdrop-filter: blur(12px);\
+  padding: 1.2em 1em;\
+  overflow-y: auto;\
+  transform: translateX(100%);\
+  transition: transform 300ms ease-out;\
+}\
+.liptv-epg.visible {\
+  transform: translateX(0);\
+}\
+.liptv-epg.hiding {\
+  transform: translateX(100%);\
+  transition: transform 250ms ease-in;\
+}\
+.liptv-epg-title {\
+  color: #fff;\
+  font-size: 1.05em;\
+  font-weight: 600;\
+  padding-bottom: 0.5em;\
+  margin-bottom: 0.6em;\
+  border-bottom: 1px solid rgba(255,255,255,0.1);\
+}\
+.liptv-epg-item {\
+  padding: 0.4em 0.5em;\
+  margin-bottom: 0.15em;\
+  border-radius: 0 4px 4px 0;\
+}\
+.liptv-epg-item.past {\
+  opacity: 0.35;\
+}\
+.liptv-epg-item.now {\
+  background: rgba(230,57,70,0.2);\
+  border-left: 3px solid #e63946;\
+}\
+.liptv-epg-item.focus {\
+  background: rgba(255,255,255,0.1);\
+}\
+.liptv-epg-item.now.focus {\
+  background: rgba(230,57,70,0.35);\
+}\
+.liptv-epg-time {\
+  font-size: 0.75em;\
+  color: rgba(255,255,255,0.4);\
+}\
+.liptv-epg-item.now .liptv-epg-time {\
+  color: #e63946;\
+  font-weight: 500;\
+}\
+.liptv-epg-prog-title {\
+  font-size: 0.88em;\
+  color: rgba(255,255,255,0.7);\
+  margin-top: 0.1em;\
+}\
+.liptv-epg-item.now .liptv-epg-prog-title {\
+  color: #fff;\
+  font-weight: 500;\
+}\
+.liptv-epg-progress {\
+  height: 2px;\
+  background: rgba(255,255,255,0.15);\
+  border-radius: 1px;\
+  margin-top: 0.3em;\
+  overflow: hidden;\
+}\
+.liptv-epg-progress-fill {\
+  height: 100%;\
+  background: #e63946;\
+}\
+.liptv-epg-empty {\
+  color: rgba(255,255,255,0.4);\
+  text-align: center;\
+  padding: 3em 1em;\
+  font-size: 0.95em;\
+}\
 ';
 
   function fmt(date) {
@@ -676,13 +837,347 @@
     });
   }
 
+  var KEY = {
+    CH_UP:   [166, 33],
+    CH_DOWN: [167, 34],
+    OK:      [13],
+    BACK:    [8, 27],
+    LEFT:    [37],
+    UP:      [38],
+    DOWN:    [40]
+  };
+
+  function isKey(keyCode, group) {
+    return group.indexOf(keyCode) !== -1;
+  }
+
+  function formatTime(ts) {
+    if (!ts) return '';
+    var d = (ts instanceof Date) ? ts : new Date(ts);
+    var h = d.getHours();
+    var m = d.getMinutes();
+    return (h < 10 ? '0' + h : h) + ':' + (m < 10 ? '0' + m : m);
+  }
+
+  function getNeighbors(channels, currentIndex) {
+    var len = channels.length;
+    if (len === 0) return [];
+
+    var count = Math.min(5, len);
+    var half  = Math.floor(count / 2);
+    var result = [];
+
+    for (var i = 0; i < count; i++) {
+      var offset = i - half;
+      var idx    = ((currentIndex + offset) % len + len) % len;
+      result.push({
+        channel:   channels[idx],
+        index:     idx,
+        isCurrent: idx === currentIndex
+      });
+    }
+
+    return result;
+  }
+
+  function renderOsdHtml(neighbors) {
+    var html = '';
+    for (var i = 0; i < neighbors.length; i++) {
+      var item = neighbors[i];
+      var ch   = item.channel;
+      var cls  = 'liptv-osd-item' + (item.isCurrent ? ' current' : '');
+      var prog = '';
+
+      if (item.isCurrent) {
+        var cur = epg.getCurrent(ch.id);
+        prog = cur ? cur.title : '';
+      }
+
+      html += '<div class="' + cls + '">' +
+        '<span class="liptv-osd-num">' + (item.index + 1) + '</span>' +
+        '<span class="liptv-osd-name">' + _esc(ch.name) + '</span>' +
+        (prog ? '<span class="liptv-osd-prog">' + _esc(prog) + '</span>' : '') +
+        '</div>';
+    }
+    return html;
+  }
+
+  function renderEpgHtml(channel) {
+    var programs = epg.getAll(channel.id);
+    if (programs.length === 0) {
+      return '<div class="liptv-epg-title">' + _esc(channel.name) + '</div>' +
+             '<div class="liptv-epg-empty">Нет данных о программе</div>';
+    }
+
+    var now  = Date.now();
+    var html = '<div class="liptv-epg-title">' + _esc(channel.name) + '</div>';
+
+    for (var i = 0; i < programs.length; i++) {
+      var p         = programs[i];
+      var startMs   = p.start ? p.start.getTime() : 0;
+      var stopMs    = p.stop  ? p.stop.getTime()  : Infinity;
+      var isCurrent = startMs <= now && now < stopMs;
+      var isPast    = stopMs  <= now;
+
+      var cls = 'liptv-epg-item';
+      if (isPast)    cls += ' past';
+      if (isCurrent) cls += ' now';
+
+      var progress = '';
+      if (isCurrent && p.stop && p.start) {
+        var total = stopMs - startMs;
+        var done  = now - startMs;
+        var pct   = total > 0 ? Math.min(100, Math.round(done / total * 100)) : 0;
+        progress  = '<div class="liptv-epg-progress">' +
+                    '<div class="liptv-epg-progress-fill" style="width:' + pct + '%"></div>' +
+                    '</div>';
+      }
+
+      var timeStr = formatTime(p.start) + (p.stop ? ' – ' + formatTime(p.stop) : '');
+      if (isCurrent) timeStr += ' · Сейчас';
+
+      html += '<div class="' + cls + '" data-epg-index="' + i + '">' +
+        '<div class="liptv-epg-time">' + timeStr + '</div>' +
+        '<div class="liptv-epg-prog-title">' + _esc(p.title) + '</div>' +
+        progress +
+        '</div>';
+    }
+
+    return html;
+  }
+
+  function _esc(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function createOsd(channels, onSwitch) {
+    // Create DOM elements
+    var osdEl = document.createElement('div');
+    osdEl.className = 'liptv-osd';
+
+    var epgEl = document.createElement('div');
+    epgEl.className = 'liptv-epg';
+
+    document.body.appendChild(osdEl);
+    document.body.appendChild(epgEl);
+
+    var _currentIndex = 0;
+    var _hideTimer    = null;
+    var _epgVisible   = false;
+    var _osdVisible   = false;
+    var _epgItems     = [];
+    var _epgFocusIdx  = -1;
+
+    // ── OSD ──────────────────────────────────────────────────────────────────
+
+    function show(currentIndex) {
+      _currentIndex = currentIndex;
+      _resetTimer();
+      _renderOsd();
+      osdEl.classList.add('visible');
+      osdEl.classList.remove('fade-out');
+      _osdVisible = true;
+    }
+
+    function hide() {
+      clearTimeout(_hideTimer);
+      _hideTimer = null;
+      osdEl.classList.remove('visible', 'fade-out');
+      _osdVisible = false;
+    }
+
+    function _renderOsd() {
+      var neighbors = getNeighbors(channels, _currentIndex);
+      osdEl.innerHTML = renderOsdHtml(neighbors);
+    }
+
+    function _resetTimer() {
+      clearTimeout(_hideTimer);
+      _hideTimer = setTimeout(function() {
+        osdEl.classList.add('fade-out');
+        setTimeout(function() {
+          osdEl.classList.remove('visible', 'fade-out');
+          _osdVisible = false;
+        }, 350);
+      }, 3000);
+    }
+
+    // ── EPG sidebar ───────────────────────────────────────────────────────────
+
+    function showEpgSidebar(channel) {
+      hide(); // hide OSD while EPG is open
+      epgEl.innerHTML = renderEpgHtml(channel);
+      epgEl.classList.add('visible');
+      epgEl.classList.remove('hiding');
+      _epgVisible  = true;
+      _epgFocusIdx = -1;
+
+      // Collect focusable items
+      _epgItems = epgEl.querySelectorAll('.liptv-epg-item');
+
+      // Auto-scroll to current program
+      var nowItem = epgEl.querySelector('.liptv-epg-item.now');
+      if (nowItem) {
+        // Set focus on current program
+        var items = Array.prototype.slice.call(_epgItems);
+        _epgFocusIdx = items.indexOf(nowItem);
+        nowItem.classList.add('focus');
+        nowItem.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    }
+
+    function hideEpgSidebar() {
+      epgEl.classList.add('hiding');
+      setTimeout(function() {
+        epgEl.classList.remove('visible', 'hiding');
+        _epgVisible  = false;
+        _epgItems    = [];
+        _epgFocusIdx = -1;
+      }, 280);
+    }
+
+    // ── EPG navigation helpers ────────────────────────────────────────────────
+
+    function _epgMoveFocus(direction) {
+      var items = epgEl.querySelectorAll('.liptv-epg-item');
+      if (items.length === 0) return;
+
+      if (_epgFocusIdx >= 0 && _epgFocusIdx < items.length) {
+        items[_epgFocusIdx].classList.remove('focus');
+      }
+
+      _epgFocusIdx += direction;
+      if (_epgFocusIdx < 0)             _epgFocusIdx = 0;
+      if (_epgFocusIdx >= items.length) _epgFocusIdx = items.length - 1;
+
+      items[_epgFocusIdx].classList.add('focus');
+      items[_epgFocusIdx].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+
+    // ── Channel switch helper ─────────────────────────────────────────────────
+
+    function _switchChannel(direction) {
+      var next = _currentIndex + direction;
+      if (next >= channels.length) next = 0;
+      if (next < 0)                next = channels.length - 1;
+      _currentIndex = next;
+      if (typeof onSwitch === 'function') onSwitch(channels[_currentIndex], _currentIndex);
+    }
+
+    // ── Keyboard handler ──────────────────────────────────────────────────────
+
+    function _onKeyDown(e) {
+      var kc = e.keyCode;
+
+      // Layer 3: EPG sidebar open
+      if (_epgVisible) {
+        if (isKey(kc, KEY.UP)) {
+          e.preventDefault(); e.stopPropagation();
+          _epgMoveFocus(-1);
+          return;
+        }
+        if (isKey(kc, KEY.DOWN)) {
+          e.preventDefault(); e.stopPropagation();
+          _epgMoveFocus(1);
+          return;
+        }
+        if (isKey(kc, KEY.LEFT) || isKey(kc, KEY.BACK)) {
+          e.preventDefault(); e.stopPropagation();
+          hideEpgSidebar();
+          return;
+        }
+        if (isKey(kc, KEY.CH_UP)) {
+          e.preventDefault(); e.stopPropagation();
+          _switchChannel(1);
+          showEpgSidebar(channels[_currentIndex]);
+          return;
+        }
+        if (isKey(kc, KEY.CH_DOWN)) {
+          e.preventDefault(); e.stopPropagation();
+          _switchChannel(-1);
+          showEpgSidebar(channels[_currentIndex]);
+          return;
+        }
+        // All other keys pass through
+        return;
+      }
+
+      // Layer 2: OSD visible
+      if (_osdVisible) {
+        if (isKey(kc, KEY.CH_UP)) {
+          e.preventDefault(); e.stopPropagation();
+          _switchChannel(1);
+          show(_currentIndex);
+          return;
+        }
+        if (isKey(kc, KEY.CH_DOWN)) {
+          e.preventDefault(); e.stopPropagation();
+          _switchChannel(-1);
+          show(_currentIndex);
+          return;
+        }
+        if (isKey(kc, KEY.OK)) {
+          e.preventDefault(); e.stopPropagation();
+          showEpgSidebar(channels[_currentIndex]);
+          return;
+        }
+        if (isKey(kc, KEY.BACK)) {
+          e.preventDefault(); e.stopPropagation();
+          hide();
+          return;
+        }
+        // All other keys pass through
+        return;
+      }
+
+      // Layer 1: nothing shown
+      if (isKey(kc, KEY.CH_UP)) {
+        e.preventDefault(); e.stopPropagation();
+        _switchChannel(1);
+        show(_currentIndex);
+        return;
+      }
+      if (isKey(kc, KEY.CH_DOWN)) {
+        e.preventDefault(); e.stopPropagation();
+        _switchChannel(-1);
+        show(_currentIndex);
+        return;
+      }
+      // All other keys pass to native Lampa player
+    }
+
+    document.addEventListener('keydown', _onKeyDown, true);
+
+    // ── Destroy ───────────────────────────────────────────────────────────────
+
+    function destroy() {
+      clearTimeout(_hideTimer);
+      document.removeEventListener('keydown', _onKeyDown, true);
+      if (osdEl.parentNode) osdEl.parentNode.removeChild(osdEl);
+      if (epgEl.parentNode) epgEl.parentNode.removeChild(epgEl);
+    }
+
+    return {
+      show:            show,
+      hide:            hide,
+      showEpgSidebar:  showEpgSidebar,
+      hideEpgSidebar:  hideEpgSidebar,
+      destroy:         destroy
+    };
+  }
+
   (function() {
 
     let historyTimer    = null;
     let _mainScreen     = null;
     let _body           = null;
     let _channels       = [];   // current channel list — used by player history tracking
-    let _currentPlayUrl = null; // URL of currently playing channel (for CH+/CH- switching)
+    let _osd = null;
+    let _switching = false;     // guard: prevents Player 'destroy' from killing OSD during channel switch
 
     function startHistoryTracking(channelId) {
       clearTimeout(historyTimer);
@@ -765,43 +1260,32 @@
 
       // Track current playing channel immediately when playChannel() is called
       setOnPlay(function(channel) {
-        _currentPlayUrl = channel.url;
+        _switching = true;
+        channel.url;
         startHistoryTracking(channel.id);
+
+        // Create OSD only once; reuse across channel switches
+        if (!_osd) {
+          var blacklist = storage.getBlacklist();
+          var visible = _channels.filter(function(ch) { return !blacklist.includes(ch.id); });
+          _osd = createOsd(visible, function(switchedChannel) {
+            playChannel(switchedChannel);
+          });
+        }
+
+        var blacklist = storage.getBlacklist();
+        var visible = _channels.filter(function(ch) { return !blacklist.includes(ch.id); });
+        var idx = visible.findIndex(function(ch) { return ch.url === channel.url; });
+        if (idx >= 0) _osd.show(idx);
+        _switching = false;
       });
 
       // Register player listeners once
       Lampa.Player.listener.follow('destroy', function() {
         stopHistoryTracking();
-        _currentPlayUrl = null;
+        // Don't destroy OSD during channel switch — Player fires 'destroy' for the old stream
+        if (!_switching && _osd) { _osd.destroy(); _osd = null; }
       });
-
-      // CH+/CH- channel switching during playback
-      // Android TV: ChannelUp=166, ChannelDown=167
-      // Also support PageUp/PageDown as fallback for browsers
-      document.addEventListener('keydown', function(e) {
-        if (!_currentPlayUrl || _channels.length === 0) return;
-
-        var direction = 0;
-        if (e.keyCode === 166 || e.keyCode === 33) direction = 1;   // CH∧ / PageUp  → next
-        if (e.keyCode === 167 || e.keyCode === 34) direction = -1;  // CH∨ / PageDown → prev
-
-        if (direction === 0) return;
-        e.preventDefault();
-        e.stopPropagation();
-
-        var blacklist = storage.getBlacklist();
-        var visible = _channels.filter(function(ch) { return !blacklist.includes(ch.id); });
-        var idx = visible.findIndex(function(ch) { return ch.url === _currentPlayUrl; });
-        if (idx < 0) return;
-
-        var next = idx + direction;
-        if (next >= visible.length) next = 0;
-        if (next < 0) next = visible.length - 1;
-
-        var ch = visible[next];
-        Lampa.Noty.show(ch.name, { time: 2000 });
-        playChannel(ch);
-      }, true);
 
       // Re-render when user updates M3U URL in settings
       registerSettings(function() { loadAndRender(); });
