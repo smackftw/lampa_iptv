@@ -6,6 +6,7 @@ import { createMainScreen }                from './ui/main.js';
 import { showCard, playChannel, setOnPlay } from './ui/card.js';
 import { showSearch }                      from './ui/search.js';
 import { registerSettings, setChannelMap } from './ui/settings.js';
+import { createOsd }                   from './ui/osd.js';
 
 (function() {
   'use strict';
@@ -15,6 +16,7 @@ import { registerSettings, setChannelMap } from './ui/settings.js';
   let _body           = null;
   let _channels       = [];   // current channel list — used by player history tracking
   let _currentPlayUrl = null; // URL of currently playing channel (for CH+/CH- switching)
+  let _osd = null;
 
   function startHistoryTracking(channelId) {
     clearTimeout(historyTimer);
@@ -99,41 +101,25 @@ import { registerSettings, setChannelMap } from './ui/settings.js';
     setOnPlay(function(channel) {
       _currentPlayUrl = channel.url;
       startHistoryTracking(channel.id);
+
+      // Create OSD for player overlay
+      if (_osd) _osd.destroy();
+      var blacklist = storage.getBlacklist();
+      var visible = _channels.filter(function(ch) { return !blacklist.includes(ch.id); });
+      var idx = visible.findIndex(function(ch) { return ch.url === channel.url; });
+
+      _osd = createOsd(visible, function(switchedChannel) {
+        playChannel(switchedChannel);
+      });
+      if (idx >= 0) _osd.show(idx);
     });
 
     // Register player listeners once
     Lampa.Player.listener.follow('destroy', function() {
       stopHistoryTracking();
       _currentPlayUrl = null;
+      if (_osd) { _osd.destroy(); _osd = null; }
     });
-
-    // CH+/CH- channel switching during playback
-    // Android TV: ChannelUp=166, ChannelDown=167
-    // Also support PageUp/PageDown as fallback for browsers
-    document.addEventListener('keydown', function(e) {
-      if (!_currentPlayUrl || _channels.length === 0) return;
-
-      var direction = 0;
-      if (e.keyCode === 166 || e.keyCode === 33) direction = 1;   // CH∧ / PageUp  → next
-      if (e.keyCode === 167 || e.keyCode === 34) direction = -1;  // CH∨ / PageDown → prev
-
-      if (direction === 0) return;
-      e.preventDefault();
-      e.stopPropagation();
-
-      var blacklist = storage.getBlacklist();
-      var visible = _channels.filter(function(ch) { return !blacklist.includes(ch.id); });
-      var idx = visible.findIndex(function(ch) { return ch.url === _currentPlayUrl; });
-      if (idx < 0) return;
-
-      var next = idx + direction;
-      if (next >= visible.length) next = 0;
-      if (next < 0) next = visible.length - 1;
-
-      var ch = visible[next];
-      Lampa.Noty.show(ch.name, { time: 2000 });
-      playChannel(ch);
-    }, true);
 
     // Re-render when user updates M3U URL in settings
     registerSettings(function() { loadAndRender(); });
