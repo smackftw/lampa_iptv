@@ -1,5 +1,18 @@
 import { storage } from '../storage.js';
 
+function promptUrl(title, current, callback) {
+  if (window.Lampa && Lampa.Keypad && typeof Lampa.Keypad.show === 'function') {
+    Lampa.Keypad.show({
+      title:   title,
+      value:   current,
+      confirm: callback
+    });
+  } else {
+    const val = window.prompt(title + ':', current);
+    if (val !== null) callback(val);
+  }
+}
+
 export function registerSettings(onM3uChange) {
   Lampa.SettingsApi.addComponent({
     component: 'liptv',
@@ -9,45 +22,51 @@ export function registerSettings(onM3uChange) {
 
   Lampa.SettingsApi.addParam({
     component: 'liptv',
-    param: { name: 'liptv_m3u_url', type: 'input', default: '' },
-    field: { name: 'M3U URL', description: 'Ссылка на M3U плейлист' },
-    onChange: function(e) {
-      const v = e.value || '';
-      storage.setM3uUrl(v);
-      if (typeof onM3uChange === 'function') onM3uChange(v);
+    param:  { name: 'liptv_m3u_url', type: 'trigger', default: false },
+    field:  { name: 'M3U URL', description: storage.getM3uUrl() || 'Не задан' },
+    onChange: function() {
+      promptUrl('M3U URL', storage.getM3uUrl() || '', function(v) {
+        v = v.trim();
+        storage.setM3uUrl(v);
+        if (typeof onM3uChange === 'function') onM3uChange(v);
+      });
     }
   });
 
   Lampa.SettingsApi.addParam({
     component: 'liptv',
-    param: { name: 'liptv_epg_url', type: 'input', default: '' },
-    field: { name: 'EPG URL (XMLTV)', description: 'Необязательно — отдельная программа передач' },
-    onChange: function(e) { storage.setEpgUrl(e.value || ''); }
+    param:  { name: 'liptv_epg_url', type: 'trigger', default: false },
+    field:  { name: 'EPG URL (XMLTV)', description: storage.getEpgUrl() || 'Не задан' },
+    onChange: function() {
+      promptUrl('EPG URL', storage.getEpgUrl() || '', function(v) {
+        storage.setEpgUrl(v.trim());
+      });
+    }
   });
 
   Lampa.SettingsApi.addParam({
     component: 'liptv',
     param: {
-      name: 'liptv_view_mode',
-      type: 'select',
-      values: { list: 'Список', grid: 'Сетка' },
+      name:    'liptv_view_mode',
+      type:    'select',
+      values:  { list: 'Список', grid: 'Сетка' },
       default: 'list'
     },
-    field: { name: 'Режим отображения' },
+    field:    { name: 'Режим отображения' },
     onChange: function(e) { storage.setViewMode(e.value || 'list'); }
   });
 
   Lampa.SettingsApi.addParam({
     component: 'liptv',
-    param: { name: 'liptv_hidden', type: 'trigger', default: false },
-    field: { name: 'Скрытые каналы', description: 'Каналы, убранные из списка' },
+    param:    { name: 'liptv_hidden', type: 'trigger', default: false },
+    field:    { name: 'Скрытые каналы', description: 'Каналы, убранные из списка' },
     onChange: function() { showHiddenChannels(); }
   });
 
   Lampa.SettingsApi.addParam({
     component: 'liptv',
-    param: { name: 'liptv_clear_history', type: 'trigger', default: false },
-    field: { name: 'Очистить историю просмотров' },
+    param:    { name: 'liptv_clear_history', type: 'trigger', default: false },
+    field:    { name: 'Очистить историю просмотров' },
     onChange: function() {
       storage.clearHistory();
       Lampa.Noty.show('История очищена');
@@ -55,7 +74,6 @@ export function registerSettings(onM3uChange) {
   });
 }
 
-// id -> name map for display in hidden channels list; set from index.js after M3U loads
 let _channelMap = {};
 export function setChannelMap(map) { _channelMap = map; }
 
