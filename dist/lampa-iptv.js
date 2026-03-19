@@ -1164,6 +1164,7 @@
     return {
       show:            show,
       hide:            hide,
+      setIndex:        function(idx) { _currentIndex = idx; },
       showEpgSidebar:  showEpgSidebar,
       hideEpgSidebar:  hideEpgSidebar,
       destroy:         destroy
@@ -1276,7 +1277,7 @@
         var blacklist = storage.getBlacklist();
         var visible = _channels.filter(function(ch) { return !blacklist.includes(ch.id); });
         var idx = visible.findIndex(function(ch) { return ch.url === channel.url; });
-        if (idx >= 0) _osd.show(idx);
+        if (idx >= 0) _osd.setIndex(idx);
         _switching = false;
       });
 

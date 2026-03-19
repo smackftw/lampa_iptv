@@ -327,6 +327,7 @@ export function createOsd(channels, onSwitch) {
   return {
     show:            show,
     hide:            hide,
+    setIndex:        function(idx) { _currentIndex = idx; },
     showEpgSidebar:  showEpgSidebar,
     hideEpgSidebar:  hideEpgSidebar,
     destroy:         destroy
