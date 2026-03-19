@@ -85,26 +85,29 @@ export function createMainScreen(allChannels, onChannelSelect) {
         + '</div>'
     );
 
-    body.find('[data-group]').on('click', function() {
+    body.find('[data-group]').on('hover:enter', function() {
       currentGroup = $(this).data('group');
       render(body);
     });
 
-    body.find('[data-action="toggle"]').on('click', function() {
+    body.find('[data-action="toggle"]').on('hover:enter', function() {
       viewMode = viewMode === 'list' ? 'grid' : 'list';
       storage.setViewMode(viewMode);
       render(body);
     });
 
-    body.find('[data-action="search"]').on('click', function() {
+    body.find('[data-action="search"]').on('hover:enter', function() {
       onChannelSelect(null, 'search');
     });
 
-    body.find('[data-id]').on('click', function() {
+    body.find('[data-id]').on('hover:enter', function() {
       const id = $(this).data('id');
       const ch = allChannels.find(function(c) { return c.id === id; });
       if (ch) onChannelSelect(ch, 'card');
     });
+
+    // Activate Lampa navigation on .selector elements
+    Lampa.Controller.toggle('content');
   }
 
   // Refresh EPG labels when data loads — keep named reference for cleanup

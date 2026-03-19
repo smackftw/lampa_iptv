@@ -1,6 +1,7 @@
 import { fetchM3U }                        from './parser.js';
 import { epg }                             from './epg.js';
 import { storage }                         from './storage.js';
+import { injectStyles }                    from './style.js';
 import { createMainScreen }                from './ui/main.js';
 import { showCard }                        from './ui/card.js';
 import { showSearch }                      from './ui/search.js';
@@ -70,6 +71,8 @@ import { registerSettings, setChannelMap } from './ui/settings.js';
   }
 
   function init() {
+    injectStyles();
+
     // Register component once — create() and destroy() called by Lampa lifecycle
     class LiptvMain {
       constructor(object) { this.activity = object; }
