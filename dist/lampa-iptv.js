@@ -588,6 +588,25 @@
       // Re-render when user updates M3U URL in settings
       registerSettings(function() { loadAndRender(); });
 
+      // Add IPTV item to the left sidebar menu
+      var menuIcon = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z"/></svg>';
+      var menuItem = $('<li class="menu__item selector" data-action="liptv">' +
+        '<div class="menu__ico">' + menuIcon + '</div>' +
+        '<div class="menu__text">IPTV</div>' +
+        '</li>');
+
+      menuItem.on('hover:enter', function() {
+        Lampa.Activity.push({ component: 'liptv_main', url: '', title: 'IPTV' });
+      });
+
+      // Insert before Settings item if found, otherwise append to end
+      var settingsItem = $('.menu .menu__list .menu__item[data-action="settings"]');
+      if (settingsItem.length) {
+        settingsItem.before(menuItem);
+      } else {
+        $('.menu .menu__list').eq(0).append(menuItem);
+      }
+
       Lampa.Activity.push({ component: 'liptv_main', url: '', title: 'IPTV' });
     }
 
