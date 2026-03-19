@@ -73,15 +73,16 @@ import { registerSettings, setChannelMap } from './ui/settings.js';
     // Register component once — create() and destroy() called by Lampa lifecycle
     class LiptvMain {
       constructor(object) { this.activity = object; }
-      create() {
+      render() {
         this.html = $('<div class="liptv-container"></div>');
         _body = this.html;
         loadAndRender();
         return this.html[0];
       }
-      start()  {}
-      pause()  {}
-      stop()   {}
+      create()  { return this.render(); }
+      start()   {}
+      pause()   {}
+      stop()    {}
       destroy() {
         stopHistoryTracking();
         if (_mainScreen) { _mainScreen.destroy(); _mainScreen = null; }
