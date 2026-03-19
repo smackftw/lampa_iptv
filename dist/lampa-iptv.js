@@ -389,7 +389,11 @@
     });
   }
 
+  var _onPlay = null;
+  function setOnPlay(fn) { _onPlay = fn; }
+
   function playChannel(channel) {
+    if (typeof _onPlay === 'function') _onPlay(channel);
     Lampa.Player.play({ url: channel.url, title: channel.name, iptv: true });
   }
 
@@ -759,14 +763,13 @@
       }
       Lampa.Component.add('liptv_main', LiptvMain);
 
-      // Register player listeners once — use _channels closure for lookup
-      Lampa.Player.listener.follow('start', function(e) {
-        const url = e && e.data && e.data.url;
-        if (!url) return;
-        _currentPlayUrl = url;
-        const ch = _channels.find(function(c) { return c.url === url; });
-        if (ch) startHistoryTracking(ch.id);
+      // Track current playing channel immediately when playChannel() is called
+      setOnPlay(function(channel) {
+        _currentPlayUrl = channel.url;
+        startHistoryTracking(channel.id);
       });
+
+      // Register player listeners once
       Lampa.Player.listener.follow('destroy', function() {
         stopHistoryTracking();
         _currentPlayUrl = null;

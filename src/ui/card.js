@@ -32,7 +32,11 @@ export function showCard(channel, onClose) {
   });
 }
 
+var _onPlay = null;
+export function setOnPlay(fn) { _onPlay = fn; }
+
 export function playChannel(channel) {
+  if (typeof _onPlay === 'function') _onPlay(channel);
   Lampa.Player.play({ url: channel.url, title: channel.name, iptv: true });
 }
 

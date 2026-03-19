@@ -3,7 +3,7 @@ import { epg }                             from './epg.js';
 import { storage }                         from './storage.js';
 import { injectStyles }                    from './style.js';
 import { createMainScreen }                from './ui/main.js';
-import { showCard, playChannel }           from './ui/card.js';
+import { showCard, playChannel, setOnPlay } from './ui/card.js';
 import { showSearch }                      from './ui/search.js';
 import { registerSettings, setChannelMap } from './ui/settings.js';
 
@@ -95,14 +95,13 @@ import { registerSettings, setChannelMap } from './ui/settings.js';
     }
     Lampa.Component.add('liptv_main', LiptvMain);
 
-    // Register player listeners once — use _channels closure for lookup
-    Lampa.Player.listener.follow('start', function(e) {
-      const url = e && e.data && e.data.url;
-      if (!url) return;
-      _currentPlayUrl = url;
-      const ch = _channels.find(function(c) { return c.url === url; });
-      if (ch) startHistoryTracking(ch.id);
+    // Track current playing channel immediately when playChannel() is called
+    setOnPlay(function(channel) {
+      _currentPlayUrl = channel.url;
+      startHistoryTracking(channel.id);
     });
+
+    // Register player listeners once
     Lampa.Player.listener.follow('destroy', function() {
       stopHistoryTracking();
       _currentPlayUrl = null;
