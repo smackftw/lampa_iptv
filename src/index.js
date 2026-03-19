@@ -74,8 +74,10 @@ import { registerSettings, setChannelMap } from './ui/settings.js';
     class LiptvMain {
       constructor(object) { this.activity = object; }
       create() {
-        _body = $(this.activity.body);
+        this.html = $('<div class="liptv-container"></div>');
+        _body = this.html;
         loadAndRender();
+        return this.html[0];
       }
       start()  {}
       pause()  {}
