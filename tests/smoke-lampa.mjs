@@ -318,6 +318,102 @@ async function run() {
     : skip('Пустая история', 'текст не найден');
 
   // ═══════════════════════════════════════════════════════════════════
+  console.log('\n\x1b[1m[11] OSD при переключении каналов\x1b[0m');
+  // ═══════════════════════════════════════════════════════════════════
+
+  // Navigate back to channel list first
+  await page.evaluate(() => {
+    Lampa.Activity.push({ component: 'liptv_main', url: '', title: 'IPTV' });
+  });
+  await page.waitForTimeout(4000);
+
+  const hasChannelForOsd = await page.evaluate(() => !!document.querySelector('.liptv-row[data-id]'));
+  if (hasChannelForOsd) {
+    // Start playing a channel (this triggers setOnPlay → creates OSD)
+    await page.evaluate(() => {
+      const row = document.querySelector('.liptv-row[data-id]');
+      if (row) $(row).trigger('hover:enter');
+    });
+    await page.waitForTimeout(2000);
+
+    // Simulate CH+ (PageUp keyCode 33)
+    await page.evaluate(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', {
+        keyCode: 33, key: 'PageUp', bubbles: true, cancelable: true
+      }));
+    });
+    await page.waitForTimeout(500);
+
+    const osdVisible = await page.evaluate(() => !!document.querySelector('.liptv-osd.visible'));
+    if (osdVisible) {
+      const osdItems = await page.evaluate(() => document.querySelectorAll('.liptv-osd-item').length);
+      ok('OSD появляется при CH+ (' + osdItems + ' каналов)');
+    } else {
+      fail('OSD не появился при CH+');
+    }
+    await shot(page, '07-osd-visible');
+
+    // Wait for auto-hide (3s + margin)
+    await page.waitForTimeout(3500);
+    const osdHidden = await page.evaluate(() => !document.querySelector('.liptv-osd.visible'));
+    osdHidden
+      ? ok('OSD авто-скрытие через 3 сек')
+      : fail('OSD не скрылся автоматически');
+  } else {
+    skip('OSD', 'каналы не загружены');
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  console.log('\n\x1b[1m[12] EPG-сайдбар\x1b[0m');
+  // ═══════════════════════════════════════════════════════════════════
+
+  if (hasChannelForOsd) {
+    // Show OSD first via CH+
+    await page.evaluate(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', {
+        keyCode: 33, key: 'PageUp', bubbles: true, cancelable: true
+      }));
+    });
+    await page.waitForTimeout(500);
+
+    // Press OK (Enter) to open EPG sidebar
+    await page.evaluate(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', {
+        keyCode: 13, key: 'Enter', bubbles: true, cancelable: true
+      }));
+    });
+    await page.waitForTimeout(500);
+
+    const epgVisible = await page.evaluate(() => !!document.querySelector('.liptv-epg.visible'));
+    const epgTitle = await page.evaluate(() => {
+      var t = document.querySelector('.liptv-epg-title');
+      return t ? t.textContent.trim() : '';
+    });
+
+    if (epgVisible && epgTitle) {
+      ok('EPG-сайдбар открыт: «' + epgTitle + '»');
+    } else {
+      fail('EPG-сайдбар не открылся', 'visible=' + epgVisible + ', title=' + epgTitle);
+    }
+    await shot(page, '08-epg-sidebar');
+
+    // Close with Back (Escape)
+    await page.evaluate(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', {
+        keyCode: 27, key: 'Escape', bubbles: true, cancelable: true
+      }));
+    });
+    await page.waitForTimeout(400);
+
+    const epgClosed = await page.evaluate(() => !document.querySelector('.liptv-epg.visible'));
+    epgClosed
+      ? ok('EPG-сайдбар закрывается по Back')
+      : fail('EPG-сайдбар не закрылся по Back');
+  } else {
+    skip('EPG-сайдбар', 'каналы не загружены');
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
   // Summary
   // ═══════════════════════════════════════════════════════════════════
   if (jsErrors.length > 0) {
