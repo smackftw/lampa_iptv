@@ -7,6 +7,7 @@ import { showCard, playChannel, setOnPlay } from './ui/card.js';
 import { showSearch }                      from './ui/search.js';
 import { registerSettings, setChannelMap } from './ui/settings.js';
 import { createOsd }                   from './ui/osd.js';
+import { resolveEpgUrls }              from './epg-sources.js';
 
 (function() {
   'use strict';
@@ -68,9 +69,20 @@ import { createOsd }                   from './ui/osd.js';
 
     if (_body) _mainScreen.render(_body);
 
-    // Start EPG fetch in background — does not block rendering
+    // Resolve EPG source and start fetch in background
     epg.reset();
-    epg.init(channels, playlistEpgUrl, storage.getEpgUrl());
+    const epgSource = storage.getEpgSource();
+    const resolved = resolveEpgUrls(epgSource, channels, playlistEpgUrl, storage.getEpgUrl());
+    if (resolved.urls.length === 0 && epgSource === 'auto' && !playlistEpgUrl) {
+      Lampa.Noty.show('Не удалось определить EPG автоматически, выберите источник в настройках');
+    }
+    if (resolved.urls.length === 0 && epgSource === 'playlist' && !playlistEpgUrl) {
+      Lampa.Noty.show('Плейлист не содержит EPG URL');
+    }
+    if (resolved.urls.length === 0 && epgSource === 'custom') {
+      Lampa.Noty.show('Укажите EPG URL в настройках');
+    }
+    epg.init(resolved.urls, channels, resolved.needsMapping);
     epg.fetchInBackground();
   }
 
@@ -129,7 +141,10 @@ import { createOsd }                   from './ui/osd.js';
     });
 
     // Re-render when user updates M3U URL in settings
-    registerSettings(function() { loadAndRender(); });
+    registerSettings(
+      function() { loadAndRender(); },   // onM3uChange
+      function() { loadAndRender(); }    // onEpgChange — reload EPG
+    );
 
     // Add IPTV item to the left sidebar menu
     var menuIcon = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z"/></svg>';
