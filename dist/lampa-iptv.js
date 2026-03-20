@@ -49,6 +49,107 @@
     return parseM3U(text);
   }
 
+  const EPG_PRESETS = {
+    auto:       { label: 'Авто' },
+    playlist:   { label: 'Из плейлиста' },
+    epgpw_ru:   { label: 'epg.pw — Россия',           url: 'https://epg.pw/xmltv/epg_RU.xml.gz' },
+    epgpw_ua:   { label: 'epg.pw — Украина',           url: 'https://epg.pw/xmltv/epg_UA.xml.gz' },
+    epgpw_cy:   { label: 'epg.pw — Кипр',              url: 'https://epg.pw/xmltv/epg_CY.xml.gz' },
+    epgpw_de:   { label: 'epg.pw — Германия',          url: 'https://epg.pw/xmltv/epg_DE.xml.gz' },
+    epgpw_us:   { label: 'epg.pw — США',               url: 'https://epg.pw/xmltv/epg_US.xml.gz' },
+    epgpw_gb:   { label: 'epg.pw — Великобритания',    url: 'https://epg.pw/xmltv/epg_GB.xml.gz' },
+    epgpw_tr:   { label: 'epg.pw — Турция',            url: 'https://epg.pw/xmltv/epg_TR.xml.gz' },
+    epgpw_fr:   { label: 'epg.pw — Франция',           url: 'https://epg.pw/xmltv/epg_FR.xml.gz' },
+    custom:     { label: 'Свой URL' }
+  };
+
+  function normalizeName(name) {
+    if (!name) return '';
+    var s = name.toLowerCase();
+    s = s.replace(/\([^)]*\)/g, '').replace(/\[[^\]]*\]/g, '');
+    s = s.replace(/\b(hd|sd|fhd|uhd|4k)\s*$/g, '');
+    s = s.replace(/\s+/g, ' ').trim();
+    return s;
+  }
+
+  function detectCountries(channels, maxCount) {
+    var counts = {};
+    channels.forEach(function(ch) {
+      if (!ch.tvgId) return;
+      var base = ch.tvgId.replace(/@.*$/, '');
+      var match = base.match(/\.([a-z]{2})$/i);
+      if (!match) return;
+      var cc = match[1].toUpperCase();
+      counts[cc] = (counts[cc] || 0) + 1;
+    });
+    return Object.entries(counts)
+      .sort(function(a, b) { return b[1] - a[1]; })
+      .slice(0, maxCount)
+      .map(function(e) { return e[0]; });
+  }
+
+  function buildChannelMapping(epgChannels, playlistChannels) {
+    var mapping = new Map();
+    var tvgIdToId = {};
+    playlistChannels.forEach(function(ch) {
+      if (ch.tvgId) tvgIdToId[ch.tvgId] = ch.id;
+    });
+    var nameToId = {};
+    playlistChannels.forEach(function(ch) {
+      var norm = normalizeName(ch.name);
+      if (norm && !nameToId[norm]) nameToId[norm] = ch.id;
+    });
+    epgChannels.forEach(function(epgCh) {
+      if (tvgIdToId[epgCh.id] !== undefined) {
+        mapping.set(epgCh.id, tvgIdToId[epgCh.id]);
+        return;
+      }
+      var norm = normalizeName(epgCh.displayName);
+      if (norm && nameToId[norm] !== undefined) {
+        mapping.set(epgCh.id, nameToId[norm]);
+      }
+    });
+    return mapping;
+  }
+
+  function resolveEpgUrls(sourceKey, channels, playlistEpgUrl, customUrl) {
+    if (sourceKey === 'auto') {
+      if (playlistEpgUrl && playlistEpgUrl.trim()) {
+        return { urls: [playlistEpgUrl.trim()], needsMapping: false };
+      }
+      var countries = detectCountries(channels, 3);
+      var withCountry = channels.filter(function(ch) {
+        if (!ch.tvgId) return false;
+        var base = ch.tvgId.replace(/@.*$/, '');
+        return /\.[a-z]{2}$/i.test(base);
+      }).length;
+      if (channels.length > 0 && withCountry / channels.length < 0.3) {
+        return { urls: [], needsMapping: true };
+      }
+      var urls = countries.map(function(cc) {
+        return 'https://epg.pw/xmltv/epg_' + cc + '.xml.gz';
+      });
+      return { urls: urls, needsMapping: true };
+    }
+    if (sourceKey === 'playlist') {
+      if (playlistEpgUrl && playlistEpgUrl.trim()) {
+        return { urls: [playlistEpgUrl.trim()], needsMapping: false };
+      }
+      return { urls: [], needsMapping: false };
+    }
+    if (sourceKey === 'custom') {
+      if (customUrl && customUrl.trim()) {
+        return { urls: [customUrl.trim()], needsMapping: false };
+      }
+      return { urls: [], needsMapping: false };
+    }
+    var preset = EPG_PRESETS[sourceKey];
+    if (preset && preset.url) {
+      return { urls: [preset.url], needsMapping: true };
+    }
+    return { urls: [], needsMapping: false };
+  }
+
   function parseXmltvDate(str) {
     if (!str) return null;
     // Format: YYYYMMDDHHmmss +HHMM
@@ -60,7 +161,15 @@
 
   function parseXMLTV(xmlText) {
     const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
-    const map = {};
+    const programs = {};
+    const channels = [];
+
+    doc.querySelectorAll('channel').forEach(node => {
+      const id = node.getAttribute('id');
+      const dn = node.querySelector('display-name');
+      if (id) channels.push({ id: id, displayName: dn ? dn.textContent : '' });
+    });
+
     doc.querySelectorAll('programme').forEach(node => {
       const channelId = node.getAttribute('channel');
       const start = parseXmltvDate(node.getAttribute('start'));
@@ -68,37 +177,82 @@
       const title = node.querySelector('title')?.textContent || '';
       const desc  = node.querySelector('desc')?.textContent  || '';
       if (!channelId || !start) return;
-      if (!map[channelId]) map[channelId] = [];
-      map[channelId].push({ channelId, title, start, stop, desc });
+      if (!programs[channelId]) programs[channelId] = [];
+      programs[channelId].push({ channelId, title, start, stop, desc });
     });
-    Object.keys(map).forEach(id => map[id].sort((a, b) => a.start - b.start));
-    return map;
+    Object.keys(programs).forEach(id => programs[id].sort((a, b) => a.start - b.start));
+    return { programs, channels };
   }
 
-  let _programs = {};
-  let _epgUrl   = null;
+  async function fetchXmlText(url) {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const buf = await res.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    if (bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) {
+      if (typeof DecompressionStream !== 'undefined') {
+        const ds = new DecompressionStream('gzip');
+        const stream = new Response(new Blob([buf]).stream().pipeThrough(ds));
+        return await stream.text();
+      }
+      var fallbackUrl = url.replace(/\.gz$/, '');
+      if (fallbackUrl !== url) {
+        var res2 = await fetch(fallbackUrl);
+        if (res2.ok) return await res2.text();
+      }
+      return null;
+    }
+    return new TextDecoder().decode(buf);
+  }
+
+  let _programs        = {};
+  let _urls            = [];
+  let _playlistChannels = [];
+  let _needsMapping    = false;
 
   const epg = {
     reset() {
-      _programs = {};
-      _epgUrl   = null;
+      _programs        = {};
+      _urls            = [];
+      _playlistChannels = [];
+      _needsMapping    = false;
     },
 
-    // channels param reserved for future tvgId→channelId mapping
-    init(channels, playlistEpgUrl, settingsEpgUrl) {
-      _epgUrl = (settingsEpgUrl || '').trim() || (playlistEpgUrl || '').trim() || null;
+    init(urls, playlistChannels, needsMapping) {
+      _urls             = urls || [];
+      _playlistChannels = playlistChannels || [];
+      _needsMapping     = !!needsMapping;
     },
 
     async fetchInBackground() {
-      if (!_epgUrl) return;
-      try {
-        const res = await fetch(_epgUrl);
-        if (!res.ok) return;
-        const text = await res.text();
-        _programs = parseXMLTV(text);
+      if (_urls.length === 0) return;
+      for (var i = 0; i < _urls.length; i++) {
+        try {
+          var text = await fetchXmlText(_urls[i]);
+          if (!text) continue;
+          var parsed = parseXMLTV(text);
+
+          if (_needsMapping && _playlistChannels.length > 0) {
+            var mapping = buildChannelMapping(parsed.channels, _playlistChannels);
+            mapping.forEach(function(playlistId, epgId) {
+              if (parsed.programs[epgId] && !_programs[playlistId]) {
+                _programs[playlistId] = parsed.programs[epgId];
+              }
+            });
+            Object.keys(parsed.programs).forEach(function(epgId) {
+              if (!_programs[epgId]) _programs[epgId] = parsed.programs[epgId];
+            });
+          } else {
+            Object.keys(parsed.programs).forEach(function(id) {
+              if (!_programs[id]) _programs[id] = parsed.programs[id];
+            });
+          }
+        } catch (e) {
+          console.warn('[lampa-iptv] EPG fetch failed:', e.message);
+        }
+      }
+      if (Object.keys(_programs).length > 0) {
         Lampa.Listener.send('liptv:epg_loaded', {});
-      } catch (e) {
-        console.warn('[lampa-iptv] EPG fetch failed:', e.message);
       }
     },
 
@@ -122,12 +276,13 @@
   };
 
   const DEFAULTS = {
-    liptv_m3u_url:   '',
-    liptv_epg_url:   '',
-    liptv_view_mode: 'list',
-    liptv_favorites: [],
-    liptv_history:   [],
-    liptv_blacklist: []
+    liptv_m3u_url:    '',
+    liptv_epg_url:    '',
+    liptv_epg_source: 'auto',
+    liptv_view_mode:  'list',
+    liptv_favorites:  [],
+    liptv_history:    [],
+    liptv_blacklist:  []
   };
 
   function get(key) { return Lampa.Storage.get(key, DEFAULTS[key]); }
@@ -136,9 +291,11 @@
   const storage = {
     getM3uUrl:  () => get('liptv_m3u_url'),
     setM3uUrl:  (v) => set('liptv_m3u_url', v),
-    getEpgUrl:  () => get('liptv_epg_url'),
-    setEpgUrl:  (v) => set('liptv_epg_url', v),
-    getViewMode:() => get('liptv_view_mode'),
+    getEpgUrl:    () => get('liptv_epg_url'),
+    setEpgUrl:    (v) => set('liptv_epg_url', v),
+    getEpgSource: () => get('liptv_epg_source'),
+    setEpgSource: (v) => set('liptv_epg_source', v),
+    getViewMode:  () => get('liptv_view_mode'),
     setViewMode:(v) => set('liptv_view_mode', v),
 
     getFavorites:   () => get('liptv_favorites'),
@@ -754,7 +911,7 @@
     }
   }
 
-  function registerSettings(onM3uChange) {
+  function registerSettings(onM3uChange, onEpgChange) {
     Lampa.SettingsApi.addComponent({
       component: 'liptv',
       icon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z"/></svg>',
@@ -774,13 +931,39 @@
       }
     });
 
+    // Build values object for select from EPG_PRESETS
+    var epgValues = {};
+    Object.keys(EPG_PRESETS).forEach(function(key) {
+      epgValues[key] = EPG_PRESETS[key].label;
+    });
+
+    Lampa.SettingsApi.addParam({
+      component: 'liptv',
+      param: {
+        name:    'liptv_epg_source',
+        type:    'select',
+        values:  epgValues,
+        default: 'auto'
+      },
+      field:    { name: 'Источник EPG' },
+      onChange: function(e) {
+        storage.setEpgSource(e.value || 'auto');
+        if (typeof onEpgChange === 'function') onEpgChange();
+      }
+    });
+
     Lampa.SettingsApi.addParam({
       component: 'liptv',
       param:  { name: 'liptv_epg_url', type: 'trigger', default: false },
-      field:  { name: 'EPG URL (XMLTV)', description: storage.getEpgUrl() || 'Не задан' },
+      field:  { name: 'EPG URL (свой)', description: storage.getEpgUrl() || 'Не задан' },
       onChange: function() {
+        if (storage.getEpgSource() !== 'custom') {
+          Lampa.Noty.show('Выберите "Свой URL" в источнике EPG');
+          return;
+        }
         promptUrl('EPG URL', storage.getEpgUrl() || '', function(v) {
           storage.setEpgUrl(v.trim());
+          if (typeof onEpgChange === 'function') onEpgChange();
         });
       }
     });
@@ -1229,9 +1412,20 @@
 
       if (_body) _mainScreen.render(_body);
 
-      // Start EPG fetch in background — does not block rendering
+      // Resolve EPG source and start fetch in background
       epg.reset();
-      epg.init(channels, playlistEpgUrl, storage.getEpgUrl());
+      const epgSource = storage.getEpgSource();
+      const resolved = resolveEpgUrls(epgSource, channels, playlistEpgUrl, storage.getEpgUrl());
+      if (resolved.urls.length === 0 && epgSource === 'auto' && !playlistEpgUrl) {
+        Lampa.Noty.show('Не удалось определить EPG автоматически, выберите источник в настройках');
+      }
+      if (resolved.urls.length === 0 && epgSource === 'playlist' && !playlistEpgUrl) {
+        Lampa.Noty.show('Плейлист не содержит EPG URL');
+      }
+      if (resolved.urls.length === 0 && epgSource === 'custom') {
+        Lampa.Noty.show('Укажите EPG URL в настройках');
+      }
+      epg.init(resolved.urls, channels, resolved.needsMapping);
       epg.fetchInBackground();
     }
 
@@ -1289,7 +1483,10 @@
       });
 
       // Re-render when user updates M3U URL in settings
-      registerSettings(function() { loadAndRender(); });
+      registerSettings(
+        function() { loadAndRender(); },   // onM3uChange
+        function() { loadAndRender(); }    // onEpgChange — reload EPG
+      );
 
       // Add IPTV item to the left sidebar menu
       var menuIcon = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z"/></svg>';
