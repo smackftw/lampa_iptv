@@ -1,4 +1,8 @@
 // tests/setup-globals.js
+const { TextEncoder, TextDecoder } = require('util');
+global.TextEncoder = TextEncoder;
+global.TextDecoder = TextDecoder;
+
 const store = {};
 
 global.Lampa = {
