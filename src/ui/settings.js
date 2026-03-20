@@ -49,8 +49,7 @@ export function registerSettings(onM3uChange, onEpgChange) {
       default: 'auto'
     },
     field:    { name: 'Источник EPG' },
-    onChange: function(e) {
-      storage.setEpgSource(e.value || 'auto');
+    onChange: function() {
       if (typeof onEpgChange === 'function') onEpgChange();
     }
   });
@@ -80,7 +79,7 @@ export function registerSettings(onM3uChange, onEpgChange) {
       default: 'list'
     },
     field:    { name: 'Режим отображения' },
-    onChange: function(e) { storage.setViewMode(e.value || 'list'); }
+    onChange: function() { /* Lampa stores select value automatically */ }
   });
 
   Lampa.SettingsApi.addParam({
